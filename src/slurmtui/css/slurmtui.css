@@ -24,6 +24,24 @@ Button {
     width: 100%;
 }
 
+#main_view {
+    height: 1fr;
+}
+
+#job_table {
+    height: 60%;
+}
+
+#log_panes {
+    height: 40%;
+}
+
+#stdout_pane,
+#stderr_pane {
+    width: 1fr;
+    border: round $primary;
+}
+
 ConfirmScreen {
     align: center middle;
     background: $background 60%;

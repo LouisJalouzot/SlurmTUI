@@ -3,17 +3,19 @@ import datetime
 import os
 import sys
 import urllib.request
+from collections import deque
 from typing import Any, Callable, Dict, Iterable
 
 from rich import print_json
 from textual import on, work
 from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
 from textual.coordinate import Coordinate
 from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.timer import Timer
-from textual.widgets import Footer, Header
+from textual.widgets import DataTable, Footer, Header, RichLog
 
 from .screens import (
     InfoScreen,
@@ -157,6 +159,7 @@ class SlurmTUI(App[SlurmTUIReturn]):
                 len(column_manager.get_enabled_columns()) - 1
             ) * [""]
             job_table.add_row(*_columns)
+            self._update_log_panes()
             return
 
         for idx, (k, v) in enumerate(self.running_jobs_dict.items()):
@@ -236,6 +239,7 @@ class SlurmTUI(App[SlurmTUIReturn]):
             if old_cursor.row < len(self.running_jobs_dict)
             else Coordinate(row=len(self.running_jobs_dict) - 1, column=0)
         )
+        self._update_log_panes()
 
     def _update_job_table(self) -> None:
         self._display_job_table()
@@ -256,6 +260,7 @@ class SlurmTUI(App[SlurmTUIReturn]):
         self._update_timer = self.set_timer(
             self._effective_update_interval(), self._update_job_table
         )
+        self.set_interval(2, self._update_log_panes)
         last_check = get_last_update_check()
         if last_check is None or (datetime.date.today() - last_check).days >= 30:
             self._check_for_update()
@@ -283,8 +288,94 @@ class SlurmTUI(App[SlurmTUIReturn]):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        yield SortableDataTable(zebra_stripes=True, name="job_table", id="job_table")
+        with Vertical(id="main_view"):
+            yield SortableDataTable(
+                zebra_stripes=True, name="job_table", id="job_table"
+            )
+            with Horizontal(id="log_panes"):
+                stdout_pane = RichLog(
+                    highlight=True,
+                    markup=False,
+                    auto_scroll=True,
+                    wrap=True,
+                    id="stdout_pane",
+                )
+                stdout_pane.border_title = "STDOUT"
+                yield stdout_pane
+                stderr_pane = RichLog(
+                    highlight=True,
+                    markup=False,
+                    auto_scroll=True,
+                    wrap=True,
+                    id="stderr_pane",
+                )
+                stderr_pane.border_title = "STDERR"
+                yield stderr_pane
         yield Footer()
+
+    @on(DataTable.RowHighlighted, "#job_table")
+    def _job_row_highlighted(self) -> None:
+        self._update_log_panes()
+
+    def _write_log_pane(self, pane_id: str, lines: Iterable[str]) -> None:
+        try:
+            pane = self.query_one(pane_id, RichLog)
+        except NoMatches:
+            return
+
+        pane.clear()
+        for line in lines:
+            pane.write(line.rstrip("\n"))
+
+    def _tail_log_lines(
+        self, selected_job: Dict[str, Any], is_std_out: bool
+    ) -> Iterable[str]:
+        stream = "STDOUT" if is_std_out else "STDERR"
+        if check_for_state(selected_job["job_state"], "PENDING"):
+            return [f"{stream}: job pending; no log yet."]
+
+        key = "standard_output" if is_std_out else "standard_error"
+        log_path = selected_job.get(key, "")
+        if not log_path:
+            return [f"{stream}: no log path reported by Slurm."]
+        if not os.path.isfile(log_path):
+            return [f"{stream}: log file not created yet or not found.", log_path]
+
+        try:
+            with open(log_path, "r", errors="replace") as f:
+                lines = deque(f, maxlen=settings.PEEK_LINES)
+        except Exception as e:
+            return [f"{stream}: error reading log file: {e}", log_path]
+
+        if not lines:
+            return [f"{stream}: log file is empty.", log_path]
+        return lines
+
+    def _update_log_panes(self) -> None:
+        running_jobs = getattr(self, "running_jobs_dict", None)
+        if running_jobs is None or len(running_jobs) == 0:
+            self._write_log_pane("#stdout_pane", ["STDOUT: no jobs running."])
+            self._write_log_pane("#stderr_pane", ["STDERR: no jobs running."])
+            return
+
+        try:
+            job_table = self.query_one(SortableDataTable)
+            self.job_table = job_table
+            selected_job = self._get_selected_job(job_table)
+        except Exception:
+            selected_job = None
+
+        if selected_job is None:
+            self._write_log_pane("#stdout_pane", ["STDOUT: no job selected."])
+            self._write_log_pane("#stderr_pane", ["STDERR: no job selected."])
+            return
+
+        self._write_log_pane(
+            "#stdout_pane", self._tail_log_lines(selected_job, is_std_out=True)
+        )
+        self._write_log_pane(
+            "#stderr_pane", self._tail_log_lines(selected_job, is_std_out=False)
+        )
 
     def _check_no_jobs(self) -> bool:
         if self.running_jobs_dict is None or len(self.running_jobs_dict) == 0:

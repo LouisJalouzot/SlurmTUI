@@ -52,6 +52,8 @@ All preferences are stored in `~/.config/slurmtui/settings.json` and persist acr
 
 The main view auto-refreshes every few seconds, showing your jobs with colored states (green for running, red for failed, etc.). Filter jobs by account, partition, or any column.
 
+Below the job table, stdout and stderr panes show the last configured peek lines for the selected job. The panes update when selection changes and on refresh.
+
 ![Job Table](./img/screenshot.png)
 
 ### Keybindings
@@ -62,6 +64,8 @@ The main view auto-refreshes every few seconds, showing your jobs with colored s
 | `E` | Tail stderr log |
 | `Ctrl+L` | Open stdout in secondary text viewer |
 | `Ctrl+E` | Open stderr in secondary text viewer |
+| `Space` | Peek stdout log |
+| `Ctrl+Space` | Peek stderr log |
 | `C` | SSH into the job's node |
 | `D` | Delete a job (with confirmation, works with array jobs) |
 | `I` | View detailed job info |
