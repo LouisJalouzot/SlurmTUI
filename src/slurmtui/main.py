@@ -91,6 +91,7 @@ class SlurmTUI(App[SlurmTUIReturn]):
     job_table = None
     jobs_to_be_deleted = []
     _update_timer: Timer = None
+    _log_pane_cache: Dict[str, tuple[str, ...]] = {}
 
     def _effective_update_interval(self) -> int:
         return settings.UPDATE_INTERVAL * (5 if settings.CHECK_ALL_JOBS else 1)
@@ -256,6 +257,7 @@ class SlurmTUI(App[SlurmTUIReturn]):
 
     def on_mount(self) -> None:
         self.theme = settings.THEME
+        self._log_pane_cache = {}
         self._display_job_table()
         self._update_timer = self.set_timer(
             self._effective_update_interval(), self._update_job_table
@@ -296,7 +298,7 @@ class SlurmTUI(App[SlurmTUIReturn]):
                 stdout_pane = RichLog(
                     highlight=True,
                     markup=False,
-                    auto_scroll=True,
+                    auto_scroll=False,
                     wrap=True,
                     id="stdout_pane",
                 )
@@ -305,7 +307,7 @@ class SlurmTUI(App[SlurmTUIReturn]):
                 stderr_pane = RichLog(
                     highlight=True,
                     markup=False,
-                    auto_scroll=True,
+                    auto_scroll=False,
                     wrap=True,
                     id="stderr_pane",
                 )
@@ -323,9 +325,27 @@ class SlurmTUI(App[SlurmTUIReturn]):
         except NoMatches:
             return
 
+        next_lines = tuple(line.rstrip("\n") for line in lines)
+        if self._log_pane_cache.get(pane_id) == next_lines:
+            return
+
+        scroll_y = pane.scroll_y
+        at_bottom = scroll_y >= pane.max_scroll_y
         pane.clear()
-        for line in lines:
-            pane.write(line.rstrip("\n"))
+        for line in next_lines:
+            pane.write(line)
+        self._log_pane_cache[pane_id] = next_lines
+
+        try:
+            if at_bottom:
+                pane.scroll_end(animate=False)
+            else:
+                pane.scroll_to(y=scroll_y, animate=False)
+        except TypeError:
+            if at_bottom:
+                pane.scroll_end()
+            else:
+                pane.scroll_to(y=scroll_y)
 
     def _tail_log_lines(
         self, selected_job: Dict[str, Any], is_std_out: bool
