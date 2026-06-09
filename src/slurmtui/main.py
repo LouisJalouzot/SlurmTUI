@@ -81,6 +81,7 @@ class SlurmTUI(App[SlurmTUIReturn]):
         Binding("1", "focus_jobs", "Focus Jobs", show=False),
         Binding("2", "focus_stdout", "Focus STDOUT", show=False),
         Binding("3", "focus_stderr", "Focus STDERR", show=False),
+        Binding("ctrl+y", "copy_focused_log_pane", "Copy Log Pane", key_display="Ctrl+Y", show=False),
         Binding("c", "connect", "Connect to Node (ssh)", key_display="C"),
         Binding("i", "info", "Info", key_display="I"),
         Binding("d", "delete", "Delete", key_display="D"),
@@ -328,6 +329,22 @@ class SlurmTUI(App[SlurmTUIReturn]):
 
     def action_focus_stderr(self) -> None:
         self.query_one("#stderr_pane").focus()
+
+    def action_copy_focused_log_pane(self) -> None:
+        focused = self.screen.focused
+        if focused is None or focused.id not in ("stdout_pane", "stderr_pane"):
+            self.notify("Focus stdout or stderr pane first", severity="warning")
+            return
+
+        pane_id = f"#{focused.id}"
+        text = "\n".join(self._log_pane_cache.get(pane_id, ()))
+        if not text:
+            self.notify("Log pane is empty", severity="warning")
+            return
+
+        self.copy_to_clipboard(text)
+        stream = "STDOUT" if focused.id == "stdout_pane" else "STDERR"
+        self.notify(f"Copied {stream} pane", severity="information", timeout=1.5)
 
     @on(DataTable.RowHighlighted, "#job_table")
     def _job_row_highlighted(self) -> None:
@@ -814,7 +831,7 @@ def main():
 
     while True:
         app = SlurmTUI()
-        reply = app.run(mouse=False)
+        reply = app.run()
         if reply:
             slurmcommand_executor(reply)
 
