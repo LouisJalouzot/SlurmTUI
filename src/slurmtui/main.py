@@ -77,11 +77,12 @@ class SlurmTUI(App[SlurmTUIReturn]):
         Binding("ctrl+l", "logs_out_less", "Less of Logs (STDOUT)", key_display="Ctrl+L", show=False),
         Binding("ctrl+e", "logs_err_less", "Less of Logs (STDERR)", key_display="Ctrl+E", show=False),
         Binding("space", "peek_stdout", "Peek STDOUT", key_display="Space"),
-        Binding("ctrl+space", "peek_stderr", "Peek STDERR", key_display="Ctrl+Space", show=False),
+        Binding("ctrl+space", "peek_stderr", "Peek STDERR", key_display="Ctrl+Space"),
+        Binding("y", "copy_stdout_peek", "Copy STDOUT", key_display="Y"),
+        Binding("ctrl+y", "copy_stderr_peek", "Copy STDERR", key_display="Ctrl+Y", show=False),
         Binding("1", "focus_jobs", "Focus Jobs", show=False),
         Binding("2", "focus_stdout", "Focus STDOUT", show=False),
         Binding("3", "focus_stderr", "Focus STDERR", show=False),
-        Binding("ctrl+y", "copy_focused_log_pane", "Copy Log Pane", key_display="Ctrl+Y", show=False),
         Binding("c", "connect", "Connect to Node (ssh)", key_display="C"),
         Binding("i", "info", "Info", key_display="I"),
         Binding("d", "delete", "Delete", key_display="D"),
@@ -330,21 +331,60 @@ class SlurmTUI(App[SlurmTUIReturn]):
     def action_focus_stderr(self) -> None:
         self.query_one("#stderr_pane").focus()
 
-    def action_copy_focused_log_pane(self) -> None:
-        focused = self.screen.focused
-        if focused is None or focused.id not in ("stdout_pane", "stderr_pane"):
-            self.notify("Focus stdout or stderr pane first", severity="warning")
+    def _copy_log_peek(self, is_std_out: bool) -> None:
+        try:
+            job_table = self.query_one(SortableDataTable)
+            self.job_table = job_table
+        except NoMatches:
+            job_table = self.job_table
+
+        if self._check_no_jobs():
             return
 
-        pane_id = f"#{focused.id}"
-        text = "\n".join(self._log_pane_cache.get(pane_id, ()))
+        selected_job = self._get_selected_job(job_table)
+        if selected_job is None:
+            return
+
+        stream = "STDOUT" if is_std_out else "STDERR"
+        if check_for_state(selected_job["job_state"], "PENDING"):
+            self.notify(
+                f"Job {selected_job['job_id']} is in Pending state, no logs available!",
+                severity="warning",
+            )
+            return
+
+        log_path = selected_job["standard_output" if is_std_out else "standard_error"]
+        if not os.path.isfile(log_path):
+            self.notify(
+                "Log file not created yet or not found!" f"\n{log_path}",
+                severity="error",
+            )
+            return
+
+        try:
+            with open(log_path, "r", errors="replace") as f:
+                lines = deque(f, maxlen=settings.PEEK_LINES)
+        except Exception as e:
+            self.notify(f"Error reading {stream}: {e}", severity="error")
+            return
+
+        text = "".join(lines)
         if not text:
-            self.notify("Log pane is empty", severity="warning")
+            self.notify(f"{stream} log is empty", severity="warning")
             return
 
         self.copy_to_clipboard(text)
-        stream = "STDOUT" if focused.id == "stdout_pane" else "STDERR"
-        self.notify(f"Copied {stream} pane", severity="information", timeout=1.5)
+        self.notify(
+            f"Copied last {len(lines)} {stream} lines",
+            severity="information",
+            timeout=1.5,
+        )
+
+    def action_copy_stdout_peek(self) -> None:
+        self._copy_log_peek(is_std_out=True)
+
+    def action_copy_stderr_peek(self) -> None:
+        self._copy_log_peek(is_std_out=False)
 
     @on(DataTable.RowHighlighted, "#job_table")
     def _job_row_highlighted(self) -> None:

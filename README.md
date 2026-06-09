@@ -66,6 +66,8 @@ Below the job table, stdout and stderr panes show the last configured peek lines
 | `Ctrl+E` | Open stderr in secondary text viewer |
 | `Space` | Peek stdout log |
 | `Ctrl+Space` | Peek stderr log |
+| `Y` | Copy stdout peek lines |
+| `Ctrl+Y` | Copy stderr peek lines |
 | `C` | SSH into the job's node |
 | `D` | Delete a job (with confirmation, works with array jobs) |
 | `I` | View detailed job info |
