@@ -76,9 +76,8 @@ class SlurmTUI(App[SlurmTUIReturn]):
         Binding("ctrl+r", "force_refresh", "Force Refresh", key_display="Ctrl+R", show=False),
         Binding("ctrl+l", "logs_out_less", "Less of Logs (STDOUT)", key_display="Ctrl+L", show=False),
         Binding("ctrl+e", "logs_err_less", "Less of Logs (STDERR)", key_display="Ctrl+E", show=False),
-        Binding("space", "peek_stdout", "Peek STDOUT", key_display="Space"),
-        Binding("ctrl+space", "peek_stderr", "Peek STDERR", key_display="Ctrl+Space"),
-        Binding("y", "copy_stdout_peek", "Copy STDOUT", key_display="Y"),
+        Binding("space", "peek_stdout", "Peek Log", key_display="Space"),
+        Binding("y", "copy_stdout_peek", "Copy Log", key_display="Y"),
         Binding("ctrl+y", "copy_stderr_peek", "Copy STDERR", key_display="Ctrl+Y", show=False),
         Binding("1", "focus_jobs", "Focus Jobs", show=False),
         Binding("2", "focus_stdout", "Focus STDOUT", show=False),
@@ -381,10 +380,14 @@ class SlurmTUI(App[SlurmTUIReturn]):
         )
 
     def action_copy_stdout_peek(self) -> None:
-        self._copy_log_peek(is_std_out=True)
+        self._copy_log_peek(is_std_out=not self._focused_log_is_stderr())
 
     def action_copy_stderr_peek(self) -> None:
         self._copy_log_peek(is_std_out=False)
+
+    def _focused_log_is_stderr(self) -> bool:
+        focused = self.screen.focused
+        return focused is not None and focused.id == "stderr_pane"
 
     @on(DataTable.RowHighlighted, "#job_table")
     def _job_row_highlighted(self) -> None:
@@ -589,12 +592,8 @@ class SlurmTUI(App[SlurmTUIReturn]):
         self.push_screen(LogPeekScreen(log_path, settings.PEEK_LINES, title))
 
     def action_peek_stdout(self) -> None:
-        """Peek at the last N lines of STDOUT."""
-        self._peek_log(is_std_out=True)
-
-    def action_peek_stderr(self) -> None:
-        """Peek at the last N lines of STDERR."""
-        self._peek_log(is_std_out=False)
+        """Peek at the focused log pane, defaulting to STDOUT."""
+        self._peek_log(is_std_out=not self._focused_log_is_stderr())
 
     def action_connect(self) -> None:
         """Connect to the node via SSH."""
