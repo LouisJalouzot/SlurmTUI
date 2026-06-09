@@ -42,6 +42,11 @@ Button {
     border: round $primary;
 }
 
+#stdout_pane:focus,
+#stderr_pane:focus {
+    border: heavy $accent;
+}
+
 ConfirmScreen {
     align: center middle;
     background: $background 60%;

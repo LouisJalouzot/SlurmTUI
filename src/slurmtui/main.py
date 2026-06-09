@@ -78,6 +78,9 @@ class SlurmTUI(App[SlurmTUIReturn]):
         Binding("ctrl+e", "logs_err_less", "Less of Logs (STDERR)", key_display="Ctrl+E", show=False),
         Binding("space", "peek_stdout", "Peek STDOUT", key_display="Space"),
         Binding("ctrl+space", "peek_stderr", "Peek STDERR", key_display="Ctrl+Space", show=False),
+        Binding("1", "focus_jobs", "Focus Jobs", show=False),
+        Binding("2", "focus_stdout", "Focus STDOUT", show=False),
+        Binding("3", "focus_stderr", "Focus STDERR", show=False),
         Binding("c", "connect", "Connect to Node (ssh)", key_display="C"),
         Binding("i", "info", "Info", key_display="I"),
         Binding("d", "delete", "Delete", key_display="D"),
@@ -303,6 +306,7 @@ class SlurmTUI(App[SlurmTUIReturn]):
                     id="stdout_pane",
                 )
                 stdout_pane.border_title = "STDOUT"
+                stdout_pane.can_focus = True
                 yield stdout_pane
                 stderr_pane = RichLog(
                     highlight=True,
@@ -312,8 +316,18 @@ class SlurmTUI(App[SlurmTUIReturn]):
                     id="stderr_pane",
                 )
                 stderr_pane.border_title = "STDERR"
+                stderr_pane.can_focus = True
                 yield stderr_pane
         yield Footer()
+
+    def action_focus_jobs(self) -> None:
+        self.query_one("#job_table").focus()
+
+    def action_focus_stdout(self) -> None:
+        self.query_one("#stdout_pane").focus()
+
+    def action_focus_stderr(self) -> None:
+        self.query_one("#stderr_pane").focus()
 
     @on(DataTable.RowHighlighted, "#job_table")
     def _job_row_highlighted(self) -> None:
