@@ -800,7 +800,7 @@ def main():
 
     while True:
         app = SlurmTUI()
-        reply = app.run()
+        reply = app.run(mouse=False)
         if reply:
             slurmcommand_executor(reply)
 
